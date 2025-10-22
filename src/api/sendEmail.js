@@ -1,4 +1,4 @@
-import Resend from "@resend/node";
+import { Resend } from "resend";
 
 const resend = new Resend(process.env.RESEND_API_KEY); // ✅ use env var
 
@@ -7,11 +7,15 @@ export default async function handler(req, res) {
     return res.status(405).json({ message: "Method not allowed" });
   }
 
-  const { name, email, phone, message } = req.body;
-
   try {
+    const { name, email, phone, message } = req.body;
+
+    if (!name || !email || !phone || !message) {
+      return res.status(400).json({ message: "All fields are required" });
+    }
+
     await resend.emails.send({
-      from: "onboarding@resend.dev>", // must be verified in Resend
+      from: "onboarding@resend.dev", // ✅ remove trailing '>'
       to: "bepolite744@gmail.com",
       subject: "New Contact Form Submission",
       html: `
@@ -25,7 +29,10 @@ export default async function handler(req, res) {
 
     return res.status(200).json({ message: "Email sent successfully!" });
   } catch (error) {
-    console.error(error);
-    return res.status(500).json({ message: "Error sending email" });
+    console.error("Resend Error:", error);
+    return res.status(500).json({
+      message: "Error sending email",
+      error: error?.message || error,
+    });
   }
 }

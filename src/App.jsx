@@ -10,6 +10,8 @@ export default function ContactForm() {
   });
 
   const [loading, setLoading] = useState(false);
+  const [successMsg, setSuccessMsg] = useState("");
+  const [errorMsg, setErrorMsg] = useState("");
 
   const handleChange = (e) => {
     setFormData({ ...formData, [e.target.name]: e.target.value });
@@ -18,47 +20,51 @@ export default function ContactForm() {
   const handleSubmit = async (e) => {
     e.preventDefault();
     setLoading(true);
+    setSuccessMsg("");
+    setErrorMsg("");
 
-    // 1) Insert in Supabase
-    const { error } = await supabase.from("customerdata").insert([
-      {
-        name: formData.name,
-        email: formData.email,
-        phone: formData.phone,
-        message: formData.message,
-      },
-    ]);
+    try {
+      // 1️⃣ Insert into Supabase
+      const { error } = await supabase.from("customerdata").insert([
+        {
+          name: formData.name,
+          email: formData.email,
+          phone: formData.phone,
+          message: formData.message,
+        },
+      ]);
 
-    if (error) {
+      if (error)
+        throw new Error("Failed to save in Supabase: " + error.message);
+
+      // 2️⃣ Send Email via Vercel API
+      const emailRes = await fetch("/api/sendEmail", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(formData),
+      });
+
+      const emailData = await emailRes.json();
+
+      if (emailRes.status !== 200) {
+        throw new Error(emailData.message || "Failed to send email");
+      }
+
+      setSuccessMsg("✅ Data saved & Email sent!");
+      setFormData({ name: "", email: "", phone: "", message: "" });
+    } catch (err) {
+      console.error(err);
+      setErrorMsg(err.message);
+    } finally {
       setLoading(false);
-      return alert("❌ Failed to save in Supabase: " + error.message);
     }
-
-    // 2) Send Email via Vercel API route
-    const emailRes = await fetch("/api/sendEmail", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(formData),
-    });
-
-    const emailData = await emailRes.json();
-
-    setLoading(false);
-
-    if (!emailData.success) {
-      return alert(
-        "⚠️ Saved in DB but failed to send email: " + emailData.error
-      );
-    }
-
-    alert("✅ Data saved & Email sent!");
-
-    // Reset form
-    setFormData({ name: "", email: "", phone: "", message: "" });
   };
 
   return (
-    <form onSubmit={handleSubmit}>
+    <form
+      onSubmit={handleSubmit}
+      style={{ maxWidth: "400px", margin: "0 auto" }}
+    >
       <input
         name="name"
         placeholder="Name"
@@ -69,6 +75,7 @@ export default function ContactForm() {
       <input
         name="email"
         placeholder="Email"
+        type="email"
         value={formData.email}
         onChange={handleChange}
         required
@@ -76,6 +83,7 @@ export default function ContactForm() {
       <input
         name="phone"
         placeholder="Phone"
+        type="tel"
         value={formData.phone}
         onChange={handleChange}
         required
@@ -91,6 +99,9 @@ export default function ContactForm() {
       <button type="submit" disabled={loading}>
         {loading ? "Sending..." : "Submit"}
       </button>
+
+      {successMsg && <p style={{ color: "green" }}>{successMsg}</p>}
+      {errorMsg && <p style={{ color: "red" }}>{errorMsg}</p>}
     </form>
   );
 }
